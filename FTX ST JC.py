@@ -23,7 +23,6 @@ creds = Credentials.from_service_account_info(
 
 client = gspread.authorize(creds)
 
-# Open sheet
 SHEET_ID = "1qS9TcpIxpaYg8x8xFepvWLQK87JdBzlNDXyM0SbN3rw"
 SHEET_NAME = "ST JC FMS"
 
@@ -37,8 +36,10 @@ def load_data():
     data = sheet.get("A6:HD")
     df = pd.DataFrame(data)
 
-    # Set header
-    df.columns = df.iloc[0]
+    # Use index-based columns (avoid duplicate header issue)
+    df.columns = range(len(df.columns))
+
+    # Remove header row (row 6)
     df = df[1:].reset_index(drop=True)
 
     return df
@@ -46,33 +47,21 @@ def load_data():
 df = load_data()
 
 # ---------------------------
-# SAFE COLUMN GETTER
+# PROCESS FUNCTION
 # ---------------------------
-def get_col(df, index):
-    try:
-        return df.columns[index]
-    except:
-        return None
-
-# ---------------------------
-# PROCESS BLOCK FUNCTION
-# ---------------------------
-def process_block(df, doer_col, planned_col, actual_col):
-    if not doer_col or not planned_col or not actual_col:
-        return pd.DataFrame()
-
+def process_block(df, doer_i, planned_i, actual_i):
     try:
         temp = df[[
-            df.columns[0],   # JOB SERIES
-            df.columns[1],   # TIMESTAMP
-            df.columns[2],   # JC CARD NO
-            df.columns[3],   # BUYER
-            df.columns[4],   # ITEM CODE
-            df.columns[5],   # CUT QTY
-            df.columns[6],   # CUTTER
-            doer_col,
-            planned_col,
-            actual_col
+            0,  # JOB SERIES
+            1,  # TIMESTAMP
+            2,  # JC CARD NO
+            3,  # BUYER
+            4,  # ITEM CODE
+            5,  # CUT QTY
+            6,  # CUTTER
+            doer_i,
+            planned_i,
+            actual_i
         ]].copy()
 
         temp.columns = [
@@ -88,10 +77,14 @@ def process_block(df, doer_col, planned_col, actual_col):
             "ACTUAL"
         ]
 
-        # Filter condition
+        # Clean values
+        temp["PLANNED"] = temp["PLANNED"].astype(str).str.strip()
+        temp["ACTUAL"] = temp["ACTUAL"].astype(str).str.strip()
+
+        # Filter: Planned present & Actual blank
         temp = temp[
             (temp["PLANNED"] != "") &
-            ((temp["ACTUAL"] == "") | (temp["ACTUAL"].isna()))
+            (temp["ACTUAL"] == "")
         ]
 
         return temp
@@ -100,18 +93,18 @@ def process_block(df, doer_col, planned_col, actual_col):
         return pd.DataFrame()
 
 # ---------------------------
-# COLUMN BLOCKS (INDEX BASED)
+# COLUMN BLOCKS (FIXED INDEX)
 # ---------------------------
 blocks = [
-    (get_col(df, 12), get_col(df, 13), get_col(df, 14)),   # M N O
-    (get_col(df, 20), get_col(df, 21), get_col(df, 22)),   # U V W
-    (get_col(df, 28), get_col(df, 29), get_col(df, 30)),   # AC AD AE
-    (get_col(df, 36), get_col(df, 37), get_col(df, 38)),   # AK AL AM
-    (get_col(df, 44), get_col(df, 45), get_col(df, 46)),   # AS AT AU
-    (get_col(df, 52), get_col(df, 53), get_col(df, 54)),   # BA BB BC
-    (get_col(df, 60), get_col(df, 61), get_col(df, 62)),   # BI BJ BK
-    (get_col(df, 68), get_col(df, 69), get_col(df, 70)),   # BQ BR BS
-    (get_col(df, 76), get_col(df, 77), get_col(df, 78)),   # BY BZ CA
+    (12, 13, 14),  # M N O
+    (20, 21, 22),  # U V W
+    (28, 29, 30),  # AC AD AE
+    (36, 37, 38),  # AK AL AM
+    (44, 45, 46),  # AS AT AU
+    (52, 53, 54),  # BA BB BC
+    (60, 61, 62),  # BI BJ BK
+    (68, 69, 70),  # BQ BR BS
+    (76, 77, 78),  # BY BZ CA
 ]
 
 # ---------------------------
@@ -119,8 +112,8 @@ blocks = [
 # ---------------------------
 final_df = pd.DataFrame()
 
-for doer, planned, actual in blocks:
-    temp_df = process_block(df, doer, planned, actual)
+for doer_i, planned_i, actual_i in blocks:
+    temp_df = process_block(df, doer_i, planned_i, actual_i)
     final_df = pd.concat([final_df, temp_df], ignore_index=True)
 
 # ---------------------------
@@ -128,27 +121,26 @@ for doer, planned, actual in blocks:
 # ---------------------------
 st.title("📊 ST JC FMS - Pending Work")
 
-st.write("### 📌 Planned but Not Completed")
+if final_df.empty:
+    st.warning("⚠️ No pending data found")
+else:
+    st.success(f"✅ Total Pending Rows: {len(final_df)}")
 
-st.write(f"Total Pending Rows: **{len(final_df)}**")
+    # Buyer filter
+    buyer_list = sorted(final_df["BUYER"].dropna().unique().tolist())
+    buyer_filter = st.selectbox("Filter by Buyer", ["All"] + buyer_list)
 
-# Optional filters
-buyer_filter = st.selectbox(
-    "Filter by Buyer",
-    ["All"] + sorted(final_df["BUYER"].dropna().unique().tolist())
-)
+    if buyer_filter != "All":
+        final_df = final_df[final_df["BUYER"] == buyer_filter]
 
-if buyer_filter != "All":
-    final_df = final_df[final_df["BUYER"] == buyer_filter]
+    # Show table
+    st.dataframe(final_df, use_container_width=True)
 
-# Display
-st.dataframe(final_df, use_container_width=True)
-
-# Download option
-csv = final_df.to_csv(index=False).encode("utf-8")
-st.download_button(
-    "⬇ Download CSV",
-    csv,
-    "pending_data.csv",
-    "text/csv"
-)
+    # Download button
+    csv = final_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "⬇ Download CSV",
+        csv,
+        "pending_data.csv",
+        "text/csv"
+    )
