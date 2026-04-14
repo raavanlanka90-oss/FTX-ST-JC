@@ -364,21 +364,19 @@ from datetime import datetime
 st.set_page_config(page_title="ST JC FMS", layout="wide")
 
 # ---------------------------
-# CUSTOM CSS (🔥 IMPORTANT)
+# CUSTOM CSS
 # ---------------------------
 st.markdown("""
 <style>
-/* Sticky Header */
 .header-row {
     position: sticky;
     top: 0;
-    background-color: #fafafa;
+    background-color: #0E1117;
     z-index: 999;
     padding: 10px 0;
     border-bottom: 2px solid #444;
 }
 
-/* Prevent button text break */
 div.stButton > button {
     white-space: nowrap;
     width: 100%;
@@ -386,7 +384,6 @@ div.stButton > button {
     font-weight: bold;
 }
 
-/* Green done button */
 .done-btn button {
     background-color: #28a745 !important;
     color: white !important;
@@ -481,25 +478,23 @@ if final_df.empty:
 st.success(f"Total Pending Rows: {len(final_df)}")
 
 # ---------------------------
-# FILTERS
+# FILTERS (ONLY DOER + STEP)
 # ---------------------------
-c1,c2,c3 = st.columns(3)
+c1, c2 = st.columns(2)
 
-# buyer = c1.selectbox("Buyer", ["All"] + sorted(final_df["BUYER"].unique()))
-doer = c2.selectbox("DOER", ["All"] + sorted(final_df["DOER"].unique()))
-step = c3.selectbox("STEP", ["All"] + sorted(final_df["STEP NO"].unique()))
+doer = c1.selectbox("Filter by DOER", ["All"] + sorted(final_df["DOER"].unique()))
+step = c2.selectbox("Filter by STEP", ["All"] + sorted(final_df["STEP NO"].unique()))
 
 df_f = final_df.copy()
 
-if buyer != "All":
-    df_f = df_f[df_f["BUYER"] == buyer]
 if doer != "All":
     df_f = df_f[df_f["DOER"] == doer]
+
 if step != "All":
     df_f = df_f[df_f["STEP NO"] == step]
 
 # ---------------------------
-# HEADER (STICKY)
+# HEADER
 # ---------------------------
 header = st.columns([2,2,2,2,2,2,2,2,2,1])
 
