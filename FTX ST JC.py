@@ -201,15 +201,8 @@ df = load_data()
 def process_block(df, doer_i, planned_i, actual_i, step_name):
     try:
         temp = df[[
-            0,  # JOB SERIES
-            2,  # JC CARD NO
-            3,  # BUYER
-            4,  # ITEM CODE
-            5,  # CUT QTY
-            6,  # CUTTER
-            doer_i,
-            planned_i,
-            actual_i
+            0, 2, 3, 4, 5, 6,
+            doer_i, planned_i, actual_i
         ]].copy()
 
         temp.columns = [
@@ -232,7 +225,6 @@ def process_block(df, doer_i, planned_i, actual_i, step_name):
             (temp["ACTUAL"] == "")
         ]
 
-        # Add STEP column
         temp["STEP NO"] = step_name
 
         return temp
@@ -241,28 +233,34 @@ def process_block(df, doer_i, planned_i, actual_i, step_name):
         return pd.DataFrame()
 
 # ---------------------------
-# BLOCKS WITH STEP
+# BLOCKS
 # ---------------------------
 blocks = [
-    (12, 13, 14, "STEP-1"),  # M N O
-    (20, 21, 22, "STEP-2"),  # U V W
-    (28, 29, 30, "STEP-3"),  # AC AD AE
-    (36, 37, 38, "STEP-4"),  # AK AL AM
-    (44, 45, 46, "STEP-5"),  # AS AT AU
-    (52, 53, 54, "STEP-6"),  # BA BB BC
-    (60, 61, 62, "STEP-7"),  # BI BJ BK
-    (68, 69, 70, "STEP-8"),  # BQ BR BS
-    (76, 77, 78, "STEP-9"),  # BY BZ CA
+    (12, 13, 14, "STEP-1"),
+    (20, 21, 22, "STEP-2"),
+    (28, 29, 30, "STEP-3"),
+    (36, 37, 38, "STEP-4"),
+    (44, 45, 46, "STEP-5"),
+    (52, 53, 54, "STEP-6"),
+    (60, 61, 62, "STEP-7"),
+    (68, 69, 70, "STEP-8"),
+    (76, 77, 78, "STEP-9"),
 ]
 
 # ---------------------------
-# PROCESS ALL
+# BUILD DATA
 # ---------------------------
 final_df = pd.DataFrame()
 
-for doer, planned, actual, step in blocks:
-    temp = process_block(df, doer, planned, actual, step)
+for b in blocks:
+    temp = process_block(df, *b)
     final_df = pd.concat([final_df, temp], ignore_index=True)
+
+# ---------------------------
+# SESSION STATE (for button color)
+# ---------------------------
+if "submitted" not in st.session_state:
+    st.session_state.submitted = set()
 
 # ---------------------------
 # UI
@@ -271,35 +269,71 @@ st.title("📊 ST JC FMS - Pending Work")
 
 if final_df.empty:
     st.warning("⚠️ No pending data found")
-else:
-    st.success(f"✅ Total Pending Rows: {len(final_df)}")
+    st.stop()
 
-    # Filter
-    buyer_list = sorted(final_df["BUYER"].dropna().unique().tolist())
-    buyer_filter = st.selectbox("Filter by Buyer", ["All"] + buyer_list)
+st.success(f"✅ Total Pending Rows: {len(final_df)}")
 
-    if buyer_filter != "All":
-        final_df = final_df[final_df["BUYER"] == buyer_filter]
+# ---------------------------
+# FILTERS
+# ---------------------------
+col1, col2, col3 = st.columns(3)
 
-    # Remove unwanted columns
-    display_df = final_df.drop(columns=["ACTUAL"])
+buyer_list = ["All"] + sorted(final_df["BUYER"].dropna().unique())
+doer_list = ["All"] + sorted(final_df["DOER"].dropna().unique())
+step_list = ["All"] + sorted(final_df["STEP NO"].dropna().unique())
 
-    # ---------------------------
-    # DISPLAY WITH BUTTONS
-    # ---------------------------
-    for i, row in display_df.iterrows():
-        cols = st.columns([2,2,2,2,2,2,2,2,2,1])
+buyer_filter = col1.selectbox("Filter by Buyer", buyer_list)
+doer_filter = col2.selectbox("Filter by DOER", doer_list)
+step_filter = col3.selectbox("Filter by STEP", step_list)
 
-        cols[0].write(row["JOB SERIES"])
-        cols[1].write(row["JC CARD NO"])
-        cols[2].write(row["BUYER"])
-        cols[3].write(row["ITEM CODE"])
-        cols[4].write(row["CUT QTY"])
-        cols[5].write(row["CUTTER"])
-        cols[6].write(row["DOER"])
-        cols[7].write(row["PLANNED"])
-        cols[8].write(row["STEP NO"])
+filtered_df = final_df.copy()
 
+if buyer_filter != "All":
+    filtered_df = filtered_df[filtered_df["BUYER"] == buyer_filter]
+
+if doer_filter != "All":
+    filtered_df = filtered_df[filtered_df["DOER"] == doer_filter]
+
+if step_filter != "All":
+    filtered_df = filtered_df[filtered_df["STEP NO"] == step_filter]
+
+# ---------------------------
+# HEADER (FREEZE STYLE)
+# ---------------------------
+header = st.columns([2,2,2,2,2,2,2,2,2,1])
+
+headers = [
+    "JOB SERIES","JC CARD NO","BUYER","ITEM CODE",
+    "CUT QTY","CUTTER","DOER","PLANNED","STEP NO","ACTION"
+]
+
+for col, h in zip(header, headers):
+    col.markdown(f"**{h}**")
+
+st.markdown("---")
+
+# ---------------------------
+# ROW DISPLAY
+# ---------------------------
+for i, row in filtered_df.iterrows():
+    cols = st.columns([2,2,2,2,2,2,2,2,2,1])
+
+    cols[0].write(row["JOB SERIES"])
+    cols[1].write(row["JC CARD NO"])
+    cols[2].write(row["BUYER"])
+    cols[3].write(row["ITEM CODE"])
+    cols[4].write(row["CUT QTY"])
+    cols[5].write(row["CUTTER"])
+    cols[6].write(row["DOER"])
+    cols[7].write(row["PLANNED"])
+    cols[8].write(row["STEP NO"])
+
+    key_id = f"{row['JOB SERIES']}_{row['STEP NO']}"
+
+    # Button color logic
+    if key_id in st.session_state.submitted:
+        cols[9].button("✅ DONE", key=f"done_{i}", disabled=True)
+    else:
         if cols[9].button("SUBMIT", key=f"btn_{i}"):
 
             STORE_SHEET.append_row([
@@ -309,6 +343,9 @@ else:
                 "YES"
             ])
 
+            st.session_state.submitted.add(key_id)
+
             st.success(f"✅ Submitted: {row['JOB SERIES']} ({row['STEP NO']})")
+
             st.cache_data.clear()
             st.rerun()
