@@ -485,7 +485,7 @@ st.success(f"Total Pending Rows: {len(final_df)}")
 # ---------------------------
 c1,c2,c3 = st.columns(3)
 
-buyer = c1.selectbox("Buyer", ["All"] + sorted(final_df["BUYER"].unique()))
+# buyer = c1.selectbox("Buyer", ["All"] + sorted(final_df["BUYER"].unique()))
 doer = c2.selectbox("DOER", ["All"] + sorted(final_df["DOER"].unique()))
 step = c3.selectbox("STEP", ["All"] + sorted(final_df["STEP NO"].unique()))
 
