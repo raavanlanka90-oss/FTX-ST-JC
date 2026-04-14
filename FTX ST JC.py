@@ -372,7 +372,7 @@ st.markdown("""
 .header-row {
     position: sticky;
     top: 0;
-    background-color: #0E1117;
+    background-color: #fafafa;
     z-index: 999;
     padding: 10px 0;
     border-bottom: 2px solid #444;
