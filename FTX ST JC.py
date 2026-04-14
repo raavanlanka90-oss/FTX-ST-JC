@@ -1,87 +1,106 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials
+from oauth2client.service_account import ServiceAccountCredentials
 
-# -----------------------------
-# PAGE CONFIG
-# -----------------------------
-st.set_page_config(page_title="FTX ST JC", layout="wide")
-
-st.title("📊 FTX ST JC - Combined View")
-
-# -----------------------------
-# GOOGLE SHEETS CONNECTION
-# -----------------------------
+# ---------------------------
+# GOOGLE SHEET CONNECTION
+# ---------------------------
 scope = [
-    "https://www.googleapis.com/auth/spreadsheets",
+    "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
 
-creds = Credentials.from_service_account_info(
-    st.secrets["google_service_account"],
-    scopes=scope
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    "credentials.json", scope
 )
 
 client = gspread.authorize(creds)
 
-# -----------------------------
-# OPEN SHEET
-# -----------------------------
-SHEET_ID = "1qS9TcpIxpaYg8x8xFepvWLQK87JdBzlNDXyM0SbN3rw"
-SHEET_NAME = "ST JC FMS"
+# Open Sheet
+sheet_id = "1qS9TcpIxpaYg8x8xFepvWLQK87JdBzlNDXyM0SbN3rw"
+sheet = client.open_by_key(sheet_id).worksheet("ST JC FMS")
 
-sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-
-# -----------------------------
+# ---------------------------
 # LOAD DATA
-# -----------------------------
-data = sheet.get_all_values()
+# ---------------------------
+data = sheet.get("A6:HD")
 
 df = pd.DataFrame(data)
 
-# Header row (row 6 → index 5)
-df.columns = df.iloc[5]
-df = df.iloc[6:].reset_index(drop=True)
+# Set header (Row 6)
+df.columns = df.iloc[0]
+df = df[1:].reset_index(drop=True)
 
-# -----------------------------
-# DEBUG (VERY IMPORTANT)
-# -----------------------------
-st.write("Detected Columns:", list(df.columns))
+# ---------------------------
+# HELPER FUNCTION
+# ---------------------------
+def process_block(df, doer_col, planned_col, actual_col):
+    temp = df[[
+        df.columns[0],   # JOB SERIES (A)
+        df.columns[2],   # JC CARD NO (C)
+        df.columns[3],   # BUYER (D)
+        df.columns[4],   # ITEM CODE (E)
+        df.columns[5],   # CUT QTY (F)
+        df.columns[6],   # CUTTER (G)
+        doer_col,
+        planned_col,
+        actual_col
+    ]].copy()
 
-# -----------------------------
-# FUNCTION USING INDEX POSITION
-# -----------------------------
-def extract_block_by_index(df, indices):
-    temp = df.iloc[:, indices].copy()
     temp.columns = [
-        "A", "B", "C", "D", "E", "F", "G",
-        "Ref", "DateTime", "Blank"
+        "JOB SERIES",
+        "JC CARD NO",
+        "BUYER",
+        "ITEM CODE",
+        "CUT QTY",
+        "CUTTER",
+        "DOER",
+        "PLANNED",
+        "ACTUAL"
     ]
+
+    # Filter condition
+    temp = temp[
+        (temp["PLANNED"] != "") &
+        ((temp["ACTUAL"] == "") | (temp["ACTUAL"].isna()))
+    ]
+
     return temp
 
-try:
-    # Column index mapping (0-based)
-    block1 = extract_block_by_index(df, [0,1,2,3,4,5,6,12,13,14])   # A-G + M N O
-    block2 = extract_block_by_index(df, [0,1,2,3,4,5,6,20,21,22])   # A-G + U V W
-    block3 = extract_block_by_index(df, [0,1,2,3,4,5,6,28,29,30])   # A-G + AC AD AE
 
-    # Combine
-    final_df = pd.concat([block1, block2, block3], ignore_index=True)
+# ---------------------------
+# COLUMN BLOCKS
+# ---------------------------
+blocks = [
+    ("DOER", "PLANNED", "ACTUAL"),  # M N O (already header names)
+    (df.columns[20], df.columns[21], df.columns[22]),  # U V W
+    (df.columns[28], df.columns[29], df.columns[30]),  # AC AD AE
+    (df.columns[36], df.columns[37], df.columns[38]),  # AK AL AM
+    (df.columns[44], df.columns[45], df.columns[46]),  # AS AT AU
+    (df.columns[52], df.columns[53], df.columns[54]),  # BA BB BC
+    (df.columns[60], df.columns[61], df.columns[62]),  # BI BJ BK
+    (df.columns[68], df.columns[69], df.columns[70]),  # BQ BR BS
+    (df.columns[76], df.columns[77], df.columns[78]),  # BY BZ CA
+]
 
-    # Remove empty rows
-    final_df = final_df[final_df["Ref"] != ""]
+# ---------------------------
+# PROCESS ALL BLOCKS
+# ---------------------------
+final_df = pd.DataFrame()
 
-    # Convert DateTime
-    final_df["DateTime"] = pd.to_datetime(final_df["DateTime"], errors="coerce")
+for block in blocks:
+    try:
+        temp_df = process_block(df, block[0], block[1], block[2])
+        final_df = pd.concat([final_df, temp_df], ignore_index=True)
+    except:
+        pass
 
-    # -----------------------------
-    # DISPLAY
-    # -----------------------------
-    st.success("✅ Data Loaded Successfully")
+# ---------------------------
+# STREAMLIT UI
+# ---------------------------
+st.title("📊 ST JC FMS - Pending Work")
 
-    st.dataframe(final_df, use_container_width=True)
+st.write("### Filtered Data (Planned but Not Actual)")
 
-except Exception as e:
-    st.error("❌ Error in processing data")
-    st.write(e)
+st.dataframe(final_df, use_container_width=True)
